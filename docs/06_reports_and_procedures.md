@@ -31,6 +31,8 @@ Reports with no parameters are **views**. Reports that take a date are **inline 
 
 Shared base view: `rpt.vw_AdmissionDetail` gives one row per stay with patient and physician names, status, length of stay and the current or last bed.
 
+Dashboard time series: `rpt.vw_DailyRevenue` (revenue per service date, treatments vs items) and `rpt.vw_DailyFlow` (admissions and discharges per day). These keep the [dashboard](../dashboard/README.md) reading only the `rpt` schema.
+
 ### How the reports are tested
 Each report's totals are reconciled against an independent count from the base tables. Examples:
 

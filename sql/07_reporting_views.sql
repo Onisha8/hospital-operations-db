@@ -406,5 +406,37 @@ FROM tree t
 JOIN dbo.Nurse n ON n.NurseID = t.NurseID;
 GO
 
+/* =============================================================================
+   Dashboard time series (dashboard/ reads only the rpt schema)
+   ============================================================================= */
+-- Revenue per service date, split by source.  ORDER BY ServiceDate
+CREATE OR ALTER VIEW rpt.vw_DailyRevenue
+AS
+SELECT ServiceDate,
+       SUM(TreatmentRevenue) AS TreatmentRevenue,
+       SUM(ItemRevenue)      AS ItemRevenue,
+       SUM(TreatmentRevenue + ItemRevenue) AS TotalRevenue
+FROM (
+    SELECT CAST(AdministeredAt AS DATE) AS ServiceDate, ChargedAmount AS TreatmentRevenue, CAST(0 AS DECIMAL(12,2)) AS ItemRevenue
+    FROM dbo.TreatmentAdministration
+    UNION ALL
+    SELECT ChargeDate, 0, LineTotal
+    FROM dbo.ItemCharge
+) x
+GROUP BY ServiceDate;
+GO
+
+-- Admissions and discharges per day (patient flow).  ORDER BY FlowDate
+CREATE OR ALTER VIEW rpt.vw_DailyFlow
+AS
+SELECT FlowDate, SUM(Admitted) AS Admissions, SUM(Discharged) AS Discharges
+FROM (
+    SELECT AdmitDate AS FlowDate, 1 AS Admitted, 0 AS Discharged FROM dbo.Admission
+    UNION ALL
+    SELECT DischargeDate, 0, 1 FROM dbo.Admission WHERE DischargeDate IS NOT NULL
+) x
+GROUP BY FlowDate;
+GO
+
 PRINT N'07_reporting_views.sql completed.';
 GO

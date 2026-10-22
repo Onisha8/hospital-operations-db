@@ -4,6 +4,8 @@ A SQL Server database for hospital ward operations covering nurses, wards, beds,
 
 > Built on coursework from **ISM 6218 Advanced Database Management** (USF, Fall 2024, Database Team 5), then audited, redesigned and extended as an individual portfolio project.
 
+![Dashboard](docs/images/dashboard_overview.png)
+
 ## Highlights
 - **Integrity in the database:** 39 business rules, each traced to a constraint, filtered unique index or stored procedure. For example, a bed cannot be double-booked, enforced by a filtered unique index on `BedID WHERE EndDate IS NULL`.
 - **Audited ETL:** CSV → staging → validation → load, with 11 validation rules, a per-row error table that records the source line, a batch audit log and idempotent reloads.
@@ -12,6 +14,7 @@ A SQL Server database for hospital ward operations covering nurses, wards, beds,
 - **Transactional workflow procedures** (admit, transfer, charge, treat, discharge) using the savepoint pattern, so they compose inside larger transactions. Lock hints (`UPDLOCK, HOLDLOCK` / `READPAST`) close the check-then-act race on beds. Errors use a documented 500xx catalog.
 - **107 automated tests:** 41 constraint, 15 data-quality, 9 ETL, 26 workflow and 16 report reconciliations. They caught real bugs during development: events generated in the future, and a timestamp-rounding bug in a procedure.
 - **Design review:** I audited the original course build from the system catalog and found 16 defects, including a no-op foreign key and a primary key that blocked nurse rotations. All are fixed in v2. See [design review](docs/05_design_review.md).
+- **Operations dashboard** (Streamlit + Plotly) over the `rpt` reporting layer: all 12 reports across 5 tabs, with a validated color-blind-safe palette in light and dark. See [dashboard/](dashboard/README.md).
 - **Measured performance tuning:** 10 indexes, each justified by a benchmarked query, cut logical reads **7× to 2,498×** (worst report 2.6 s → 6 ms). The diagnosis came from execution plans (eager index spools). The write cost is measured too (3.6× on bulk inserts). A parameter sniffing demo covers `RECOMPILE`, index hints and Query Store. See [PERFORMANCE.md](performance/PERFORMANCE.md).
 
 ## Data model
@@ -46,6 +49,7 @@ The full logical model with attributes is in [docs/03_erd_and_schema.md](docs/03
 | [04 Data dictionary](docs/04_data_dictionary.md) | Every table, column, type and constraint |
 | [05 Design review](docs/05_design_review.md) | v1 audit findings → v2 fixes and trade-offs |
 | [06 Reports and procedures](docs/06_reports_and_procedures.md) | Report catalog, workflow procedures, transaction design, error catalog, analytical queries, sample output |
+| [Dashboard](dashboard/README.md) | Tabs, how to run, driver and design choices |
 | [Performance tuning](performance/PERFORMANCE.md) | Method, before/after results, plan diagnosis, trade-offs, parameter sniffing and Query Store |
 
 ## Quick start
@@ -81,6 +85,17 @@ A full build from scratch, including the data load and all 107 tests, takes abou
 .\performance\run_benchmark.ps1                          # before/after index benchmark -> performance/results.md + .sqlplan files
 .\run_sql.ps1 -Files performance\parameter_sniffing_demo.sql
 ```
+
+## Dashboard
+```powershell
+cd dashboard
+python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\streamlit run app.py
+```
+
+| Billing | Nursing |
+|---|---|
+| ![Billing tab](docs/images/dashboard_billing.jpg) | ![Nursing tab](docs/images/dashboard_nursing.jpg) |
 
 ## ETL: patient import
 ```
@@ -130,7 +145,7 @@ SELECT * FROM rpt.fn_BedOccupancyOn('2025-01-15') ORDER BY WardNumber; -- R1 on 
 See [06 Reports and procedures](docs/06_reports_and_procedures.md) for every report, procedure and error code.
 
 ## Tech stack
-SQL Server 2022 · T-SQL · SSMS · Mermaid (diagrams) · Power BI *(planned)*
+SQL Server 2022 · T-SQL · PowerShell · Python (Streamlit, Plotly, pandas, mssql-python) · Mermaid (diagrams)
 
 ## Repository layout
 ```
@@ -141,7 +156,7 @@ queries/       analytical business queries
 run_sql.ps1    build / test runner
 data/          source CSVs for the ETL (course extract + crafted test batch)
 performance/   benchmark harness, results, before/after execution plans, sniffing demo
-dashboard/     reporting dashboard
+dashboard/     Streamlit dashboard over the rpt views
 ```
 
 ## Roadmap
@@ -150,7 +165,7 @@ dashboard/     reporting dashboard
 - [x] **Phase 3:** ETL from CSV via staging with validation and audit; 1.39M rows of synthetic data; data-quality and ETL tests
 - [x] **Phase 4:** Reporting views for R1–R12, transactional workflow procedures, 12 analytical queries, 41 workflow and report tests
 - [x] **Phase 5:** Benchmarked index tuning (15-query workload, before/after plans), parameter sniffing / RECOMPILE / Query Store demo
-- [ ] **Phase 6:** Reporting dashboard
+- [x] **Phase 6:** Streamlit dashboard covering R1–R12 (reads only the `rpt` schema), smoke-tested, light and dark themes
 - [ ] **Phase 7:** One-command setup (Docker) and final write-up
 
 ## Credits

@@ -1,0 +1,13 @@
+[server]
+headless = true
+port = 8501
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+# Pinned so page and charts always match (charts.py has validated light and dark palettes;
+# start with --theme.base dark to use the dark variant).
+base = "light"
+primaryColor = "#2a78d6"
+font = "sans serif"
