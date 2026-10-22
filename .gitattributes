@@ -1,0 +1,4 @@
+# Keep data files byte-for-byte (the ETL is tested against both CRLF and LF files)
+*.csv -text
+*.sql text eol=crlf
+*.ps1 text eol=crlf

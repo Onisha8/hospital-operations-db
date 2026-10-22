@@ -1,0 +1,10 @@
+# SQL Server data/log files
+*.mdf
+*.ldf
+*.bak
+# Power BI temp
+*.pbix.bak
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
