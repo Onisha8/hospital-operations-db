@@ -51,7 +51,7 @@ Associative / event entities: `NurseCertification`, `PhysicianSpecialty`, `Nurse
 
 ## 1.6 Required reports
 
-Each report maps to a view or stored procedure built in Phase 4.
+Each report maps to a view, inline function or procedure in `sql/07_reporting_views.sql` and `sql/08_stored_procedures.sql`. The catalog is in [06 Reports and procedures](06_reports_and_procedures.md).
 
 | # | Report | Frequency |
 |---|---|---|

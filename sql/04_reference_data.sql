@@ -1,7 +1,7 @@
 /* =============================================================================
    04_reference_data.sql
    Loads the lookup tables that the schema itself depends on.
-   (Operational and bulk data are loaded in Phase 3.)
+   (Operational and bulk data are loaded by 05_etl_patient_import.sql and 06_generate_bulk_data.sql.)
 
    Re-runnable: MERGE inserts missing rows and updates changed names,
    so running it twice changes nothing.

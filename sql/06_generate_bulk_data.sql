@@ -1,7 +1,7 @@
 /* =============================================================================
    06_generate_bulk_data.sql
    Generates ~1.2 million rows of realistic synthetic data across every table,
-   so query plans and indexing choices in Phase 5 are tested at realistic volume.
+   so query plans and indexing choices (performance/) are tested at realistic volume.
 
    Design
    - Set-based: no loops or cursors. Every table is filled with INSERT ... SELECT

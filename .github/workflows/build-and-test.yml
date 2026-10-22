@@ -1,0 +1,27 @@
+# Builds the database from scratch in SQL Server 2022 (Linux container) and runs
+# all tests on every push and pull request: the same path as `docker compose up`.
+name: build-and-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build database and run all tests (docker compose)
+        # --exit-code-from: the job fails unless docker/build.sh (build + 107 tests) exits 0
+        run: docker compose up --exit-code-from build
+
+      - name: Show database logs on failure
+        if: failure()
+        run: docker compose logs db --tail 200
+
+      - name: Clean up
+        if: always()
+        run: docker compose down -v

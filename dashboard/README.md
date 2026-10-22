@@ -24,7 +24,16 @@ python -m venv .venv
 .venv\Scripts\streamlit run app.py          # opens http://localhost:8501
 ```
 
-Set `HOSPITALOPS_SERVER` to use a named instance, for example `.\SQLEXPRESS`. Windows authentication is used.
+By default it connects to `localhost` with Windows authentication. Set `HOSPITALOPS_SERVER` for a named instance, for example `.\SQLEXPRESS`.
+
+**Against the Docker database** (`docker compose up` from the repo root), use SQL authentication:
+
+```bash
+export HOSPITALOPS_SERVER="localhost,14333" HOSPITALOPS_USER=sa HOSPITALOPS_PASSWORD='HospitalOps!Dev2026'
+# PowerShell: $env:HOSPITALOPS_SERVER="localhost,14333"; $env:HOSPITALOPS_USER="sa"; $env:HOSPITALOPS_PASSWORD='HospitalOps!Dev2026'
+```
+
+On macOS/Linux, create the venv with `python3 -m venv .venv` and use `.venv/bin/...` instead of `.venv\Scripts\...`.
 
 ## Design notes
 

@@ -5,7 +5,9 @@ the bill procedure), never the base tables, so the dashboard and the SQL reports
 can't disagree. Functions return pandas DataFrames and have no Streamlit
 dependency, so ``smoke_test.py`` can call them directly.
 
-Connection: Windows authentication to HOSPITALOPS_SERVER (default: localhost).
+Connection: HOSPITALOPS_SERVER (default: localhost) with Windows authentication,
+or SQL authentication when HOSPITALOPS_USER / HOSPITALOPS_PASSWORD are set
+(the Docker build: server "localhost,14333", user "sa").
 Driver: Microsoft's ``mssql-python`` package, which bundles its own driver, so
 nothing needs installing system-wide. (The ODBC driver built into Windows can't
 complete the TLS handshake with SQL Server 2022.)
@@ -20,12 +22,15 @@ import mssql_python
 import pandas as pd
 
 SERVER = os.environ.get("HOSPITALOPS_SERVER", "localhost")
+USER = os.environ.get("HOSPITALOPS_USER")            # set for SQL authentication (e.g. the Docker build)
+PASSWORD = os.environ.get("HOSPITALOPS_PASSWORD", "")
 DATABASE = "HospitalOps"
 
 
 def _connect():
+    auth = f"UID={USER};PWD={{{PASSWORD}}};" if USER else "Trusted_Connection=yes;"
     return mssql_python.connect(
-        f"Server={SERVER};Database={DATABASE};Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;"
+        f"Server={SERVER};Database={DATABASE};{auth}Encrypt=yes;TrustServerCertificate=yes;"
     )
 
 

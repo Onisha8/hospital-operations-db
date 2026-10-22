@@ -1,21 +1,79 @@
 # Hospital Operations Database
 
-A SQL Server database for hospital ward operations covering nurses, wards, beds, admissions, treatments, billing and nurse care events. The project runs end to end: requirements, a normalized design, ETL, stored procedures, performance tuning, and a reporting dashboard.
+A complete SQL Server project for running a hospital's wards: nurses, beds, admissions, treatments, billing and nursing care. It goes from **requirements and a normalized design** to **ETL, transactional procedures, a reporting layer, measured performance tuning and a dashboard**, and 107 automated tests back every claim.
 
-> Built on coursework from **ISM 6218 Advanced Database Management** (USF, Fall 2024, Database Team 5), then audited, redesigned and extended as an individual portfolio project.
+> Built on my coursework for **ISM 6218 Advanced Database Management** (University of South Florida, Fall 2024, Database Team 5), then audited, redesigned and extended as an individual portfolio project.
 
-![Dashboard](docs/images/dashboard_overview.png)
+![HospitalOps dashboard](docs/images/dashboard_overview.png)
+
+## At a glance
+
+| | |
+|---|---|
+| **Design** | 18 tables in 3NF · 39 business rules, each traced to the constraint or procedure that enforces it · 16 defects found and fixed in the original course build |
+| **Data** | ~1.39M rows: 5 years of consistent synthetic history plus an audited CSV ETL (11 validation rules, error table, idempotent reloads) |
+| **Logic** | 6 transactional workflow procedures (admit, transfer, charge, treat, discharge, bill) · 17 reporting views and functions covering all 12 required reports |
+| **Performance** | 10 benchmarked indexes: **7× to 2,498× fewer reads**, worst report **2.6 s → 6 ms** · parameter sniffing, `RECOMPILE`, Query Store |
+| **Quality** | **107 automated tests** (constraints, data quality, ETL, workflow, report reconciliation). They caught 3 real bugs during development. |
+| **Dashboard** | Streamlit + Plotly, 5 tabs, color-blind-safe palette validated in light and dark |
+
+## Quick start
+
+**Windows + SQL Server** (2019+ Developer or Express, Windows authentication):
+
+```powershell
+.\setup.ps1 -Launch
+```
+
+This checks prerequisites, builds the database (~1.4M rows), runs all 107 tests, sets up and smoke-tests the dashboard, then opens it at http://localhost:8501. The first run takes about 6 minutes (mostly installing Python packages); later runs take about 2.
+
+**Any OS with Docker:**
+
+```bash
+docker compose up
+```
+
+This starts SQL Server 2022 in a container, builds the database and runs all 107 tests. The `build` container exits with code 0 only if everything passed. To point the dashboard at the container, set `HOSPITALOPS_SERVER=localhost,14333`, `HOSPITALOPS_USER=sa` and `HOSPITALOPS_PASSWORD` (see [dashboard/README.md](dashboard/README.md)).
+
+## What this project demonstrates
+
+| Skill | Where to look |
+|---|---|
+| Requirements → ERD → relational schema → data dictionary | [docs/01–04](docs/), Mermaid ERDs in [03](docs/03_erd_and_schema.md) |
+| Auditing an existing database from the system catalog | [05 Design review](docs/05_design_review.md): a no-op foreign key, a primary key that blocked nurse rotations, and 14 more |
+| Declarative integrity: keys, CHECK, DEFAULT, computed columns, **filtered unique indexes** | [`sql/03_constraints.sql`](sql/03_constraints.sql), e.g. no double-booked beds via `UNIQUE (BedID) WHERE EndDate IS NULL` |
+| ETL with staging, validation, error capture and audit | [`sql/05_etl_patient_import.sql`](sql/05_etl_patient_import.sql) |
+| Set-based data generation (no loops) | [`sql/06_generate_bulk_data.sql`](sql/06_generate_bulk_data.sql) |
+| Joins (self, outer, apply), CTEs (incl. recursive), window functions, `PIVOT`, `EXCEPT`/`INTERSECT`, gaps and islands | [`sql/07_reporting_views.sql`](sql/07_reporting_views.sql), [`queries/business_queries.sql`](queries/business_queries.sql) |
+| Stored procedures, transactions, savepoints, lock hints for concurrency | [`sql/08_stored_procedures.sql`](sql/08_stored_procedures.sql), [06 Reports and procedures](docs/06_reports_and_procedures.md) |
+| Execution plans, covering and filtered indexes, index hints, `RECOMPILE`, Query Store | [PERFORMANCE.md](performance/PERFORMANCE.md) |
+| Testing a database: named-constraint tests, data-quality checks, report reconciliation | [`tests/`](tests/) |
+| Serving the reporting layer to users | [`dashboard/`](dashboard/README.md) |
 
 ## Highlights
-- **Integrity in the database:** 39 business rules, each traced to a constraint, filtered unique index or stored procedure. For example, a bed cannot be double-booked, enforced by a filtered unique index on `BedID WHERE EndDate IS NULL`.
-- **Audited ETL:** CSV → staging → validation → load, with 11 validation rules, a per-row error table that records the source line, a batch audit log and idempotent reloads.
-- **1.39M rows of consistent synthetic data**, generated set-based and reproducibly in ~80 s. Five years of hospital history in which beds are never double-booked and every care event is performed by a nurse who was on shift in that ward that day.
-- **All 12 required reports** as `rpt` views and inline functions, each reconciled against the base tables by automated tests.
-- **Transactional workflow procedures** (admit, transfer, charge, treat, discharge) using the savepoint pattern, so they compose inside larger transactions. Lock hints (`UPDLOCK, HOLDLOCK` / `READPAST`) close the check-then-act race on beds. Errors use a documented 500xx catalog.
-- **107 automated tests:** 41 constraint, 15 data-quality, 9 ETL, 26 workflow and 16 report reconciliations. They caught real bugs during development: events generated in the future, and a timestamp-rounding bug in a procedure.
-- **Design review:** I audited the original course build from the system catalog and found 16 defects, including a no-op foreign key and a primary key that blocked nurse rotations. All are fixed in v2. See [design review](docs/05_design_review.md).
-- **Operations dashboard** (Streamlit + Plotly) over the `rpt` reporting layer: all 12 reports across 5 tabs, with a validated color-blind-safe palette in light and dark. See [dashboard/](dashboard/README.md).
-- **Measured performance tuning:** 10 indexes, each justified by a benchmarked query, cut logical reads **7× to 2,498×** (worst report 2.6 s → 6 ms). The diagnosis came from execution plans (eager index spools). The write cost is measured too (3.6× on bulk inserts). A parameter sniffing demo covers `RECOMPILE`, index hints and Query Store. See [PERFORMANCE.md](performance/PERFORMANCE.md).
+
+**Every rule lives in the database.** "A bed can't hold two patients" isn't application code. It's a filtered unique index, and the procedures check-then-act under `UPDLOCK, HOLDLOCK` so two simultaneous admissions can't race for the same bed. Rules that SQL Server can't declare, such as "every stay has at least one charge", are enforced in procedures and verified by data-quality checks.
+
+**Performance work that's measured, not guessed.** A 15-query benchmark records logical reads, CPU and execution plans before and after tuning. All four hot spots had an *Eager Index Spool*: SQL Server was rebuilding a temporary index in tempdb on every run. The write-up also records the costs (+51 MB storage, 3.6× bulk-insert I/O), a filtered-index gotcha, and the indexes I deliberately didn't add. → [PERFORMANCE.md](performance/PERFORMANCE.md)
+
+**Tests that found real bugs.** A data-quality check caught synthetic events dated in the future. A rebuild caught a procedure that rejected its own default timestamp about half the time, because `DATETIME2(0)` rounds up; it now has a regression test. A plan review caught a filtered index the optimizer silently ignored.
+
+**Honest data.** The CSV ETL loads the course's real 100-row extract plus a crafted batch with one defect per validation rule: 11 rows rejected with the exact source line and reason. The synthetic history is consistent by construction (no overlapping stays, every care event by a nurse on shift in that ward). Its known limitation is documented: distributions are uniform, so some analytics come out flat.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    CSV[data/*.csv] -->|BULK INSERT| STG[stg schema<br/>staging, validation,<br/>error log, batch audit]
+    STG -->|clean rows| DBO[(dbo schema<br/>18 tables, 39 rules)]
+    GEN[06 synthetic<br/>generator] --> DBO
+    APP[workflow procedures<br/>admit · transfer · charge<br/>treat · discharge] <--> DBO
+    DBO --> RPT[rpt schema<br/>views + inline functions<br/>reports R1–R12]
+    RPT --> DASH[Streamlit dashboard]
+    RPT --> BILL[usp_GetPatientBill]
+    TESTS[107 tests] -.verify.-> DBO
+    TESTS -.reconcile.-> RPT
+```
 
 ## Data model
 
@@ -38,135 +96,71 @@ erDiagram
     NURSE ||--o{ NURSE_CARE_EVENT : performs
 ```
 
-The full logical model with attributes is in [docs/03_erd_and_schema.md](docs/03_erd_and_schema.md).
+Full logical model with every attribute: [03 ERD and schema](docs/03_erd_and_schema.md).
+
+| Billing tab | Nursing tab |
+|---|---|
+| ![Billing tab](docs/images/dashboard_billing.jpg) | ![Nursing tab](docs/images/dashboard_nursing.jpg) |
 
 ## Documentation
+
 | Doc | Contents |
 |---|---|
 | [01 Requirements](docs/01_requirements.md) | Problem, scope, actors, admit workflow, the 12 required reports |
 | [02 Business rules](docs/02_business_rules.md) | 39 rules, each with its enforcement mechanism |
 | [03 ERD and schema](docs/03_erd_and_schema.md) | Conceptual and logical ERD, relational schema, normalization |
-| [04 Data dictionary](docs/04_data_dictionary.md) | Every table, column, type and constraint |
-| [05 Design review](docs/05_design_review.md) | v1 audit findings → v2 fixes and trade-offs |
-| [06 Reports and procedures](docs/06_reports_and_procedures.md) | Report catalog, workflow procedures, transaction design, error catalog, analytical queries, sample output |
+| [04 Data dictionary](docs/04_data_dictionary.md) | Every table, column, constraint, ETL error code and row count |
+| [05 Design review](docs/05_design_review.md) | Audit of the original course build: 16 defects → fixes and trade-offs |
+| [06 Reports and procedures](docs/06_reports_and_procedures.md) | Report catalog, procedures, transaction design, error catalog, analytics |
+| [Performance tuning](performance/PERFORMANCE.md) | Method, before/after results, plan diagnosis, trade-offs, sniffing demo |
 | [Dashboard](dashboard/README.md) | Tabs, how to run, driver and design choices |
-| [Performance tuning](performance/PERFORMANCE.md) | Method, before/after results, plan diagnosis, trade-offs, parameter sniffing and Query Store |
 
-## Quick start
-Requires SQL Server 2019+ (Developer or Express) on Windows with Windows authentication.
+<details>
+<summary><b>Repository layout and build scripts</b></summary>
 
-```powershell
-.\run_sql.ps1 -Test                     # build the HospitalOps database, then run the test suite
-.\run_sql.ps1 -Server ".\SQLEXPRESS"    # target a named instance
 ```
-
-`run_sql.ps1` runs the numbered scripts in `sql/` in order, splitting on `GO` like SSMS does. It uses the .NET SqlClient built into Windows, so it needs no sqlcmd or ODBC driver. You can also open the scripts in SSMS and run them in order.
+setup.ps1            one-command setup on Windows
+docker-compose.yml   one-command build on any OS (docker/build.sh)
+run_sql.ps1          build/test runner (splits on GO, no sqlcmd or ODBC needed)
+sql/                 numbered, re-runnable build scripts
+tests/               automated tests
+queries/             analytical business queries (not part of the build)
+performance/         benchmark harness, results, before/after .sqlplan files, sniffing demo
+dashboard/           Streamlit app over the rpt schema
+data/                ETL source files (course extract + crafted test batch)
+docs/                design documentation (original v1 diagrams in docs/original/)
+```
 
 | Script | What it does |
 |---|---|
 | `sql/01_create_database.sql` | Database, `stg` / `rpt` schemas, read-committed snapshot, Query Store |
-| `sql/02_create_tables.sql` | 18 tables with primary keys and computed columns (`Age`, persisted `LineTotal`) |
-| `sql/03_constraints.sql` | 22 foreign keys, 21 checks, 7 defaults, 10 unique constraints, 3 filtered unique indexes, each tagged with its business rule |
-| `sql/04_reference_data.sql` | Idempotent `MERGE` of care event types, specialties and certifications |
-| `sql/05_etl_patient_import.sql` | Patient ETL: `BULK INSERT` into `stg`, cleaning view, validation into `stg.PatientImportError`, load into `dbo.Patient`, batch audit in `stg.LoadBatch` |
-| `sql/06_generate_bulk_data.sql` | ~1.39M rows of reproducible synthetic data across all tables (5 years of history) |
-| `sql/07_reporting_views.sql` | Reporting layer: views and inline TVFs for reports R1–R12 |
-| `sql/08_stored_procedures.sql` | `usp_AdmitPatient`, `usp_TransferPatient`, `usp_RecordItemCharge`, `usp_RecordTreatment`, `usp_DischargePatient`, `usp_GetPatientBill` |
-| `sql/09_performance_indexes.sql` | 10 tuning indexes, each tagged with the workload query it serves, plus the ones deliberately not added |
-| `tests/test_constraints.sql` | **41 tests**: valid data is accepted and every invalid case is rejected *by the expected named constraint*. Runs in a rolled-back transaction. |
-| `tests/test_data_quality.sql` | **15 checks** constraints can't express: minimum cardinalities, no overlapping stays, events inside their stay, nurse on shift, no supervision cycles (recursive CTE) |
-| `tests/test_etl.sql` | **9 tests**: batch counts, every crafted defect caught by the right rule, normalization, idempotent reload |
-| `tests/test_procedures_and_reports.sql` | **42 tests**: a full admit → charge → treat → transfer → discharge walk-through, every documented error, savepoint behavior, and reconciliation of all 12 reports |
-| `queries/business_queries.sql` | 12 analytical questions (window functions, `PIVOT`, `EXCEPT`/`INTERSECT`, gaps and islands). Not part of the build: run with `-Files queries\business_queries.sql` |
+| `sql/02_create_tables.sql` | 18 tables with primary keys and computed columns |
+| `sql/03_constraints.sql` | 22 FKs, 21 checks, 7 defaults, 10 unique constraints, 3 filtered unique indexes, each tagged with its rule |
+| `sql/04_reference_data.sql` | Idempotent `MERGE` of lookup data |
+| `sql/05_etl_patient_import.sql` | Patient ETL with validation, error table and batch audit |
+| `sql/06_generate_bulk_data.sql` | ~1.39M rows of reproducible synthetic data |
+| `sql/07_reporting_views.sql` | `rpt` views and inline functions for R1–R12 and the dashboard |
+| `sql/08_stored_procedures.sql` | Workflow procedures and the itemized bill |
+| `sql/09_performance_indexes.sql` | 10 tuning indexes, each tied to a measured query |
+| `tests/test_constraints.sql` | 41 tests: each invalid case rejected *by the expected named constraint* |
+| `tests/test_data_quality.sql` | 15 cross-table checks constraints can't express |
+| `tests/test_etl.sql` | 9 tests: every crafted defect caught by the right rule; idempotent reload |
+| `tests/test_procedures_and_reports.sql` | 42 tests: full stay walk-through, every error code, savepoints, all 12 reports reconciled |
 
-A full build from scratch, including the data load and all 107 tests, takes about 90 seconds.
+Other entry points:
 
 ```powershell
-.\performance\run_benchmark.ps1                          # before/after index benchmark -> performance/results.md + .sqlplan files
+.\run_sql.ps1 -Test                                   # rebuild + tests only
+.\performance\run_benchmark.ps1                       # before/after index benchmark -> results.md + plans
 .\run_sql.ps1 -Files performance\parameter_sniffing_demo.sql
+.\run_sql.ps1 -Files queries\business_queries.sql
 ```
-
-## Dashboard
-```powershell
-cd dashboard
-python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\streamlit run app.py
-```
-
-| Billing | Nursing |
-|---|---|
-| ![Billing tab](docs/images/dashboard_billing.jpg) | ![Nursing tab](docs/images/dashboard_nursing.jpg) |
-
-## ETL: patient import
-```
-data/*.csv ──BULK INSERT──▶ stg.PatientImport ──vw_PatientImportClean──▶ validate ──▶ dbo.Patient
-                                   │                                         │
-                             stg.LoadBatch (audit)                stg.PatientImportError
-```
-Two files are loaded:
-
-- `patient_import.csv` is the course's 100-row extract. It is clean, so all 100 rows load.
-- `patient_import_batch2.csv` is a **crafted** 15-row extract with one deliberate defect per rule: bad and future dates, invalid codes, short zip and phone, an over-long name, an in-file duplicate, a patient already loaded, and a quoted comma. 3 rows load, 11 are rejected with the exact source line and reason, and 1 is skipped as already present. It also uses Unix line endings, while the course file uses Windows, so both formats are exercised.
-
-| Line | Code | Reason | Raw value |
-|---|---|---|---|
-| 5 | E02 | DOB is missing or not a valid date | `31/02/1990` |
-| 9 | E06 | State is not a valid US state code | `XX` |
-| 12 | S01 | Already exists as PatientID 1 | `Joelle Grant Oct 15, 1961` |
-| 13 | E10 | Duplicate of line 2 in the same file | `Maria Lopez 1985-03-22` |
-
-*(excerpt from `stg.PatientImportError`; the full rule list is in the [data dictionary](docs/04_data_dictionary.md#staging-stg-schema))*
-
-## Synthetic data
-`sql/06_generate_bulk_data.sql` simulates five years of operations so query tuning in Phase 5 runs at realistic volume:
-
-| Metric | Value |
-|---|---|
-| Patients / stays | 50,000 / ~86,000 (~36,000 returning patients) |
-| Treatments / item charges / care events | ~216,000 / ~430,000 / ~467,000 |
-| Current bed occupancy | ~63% |
-| Average length of stay | ~3.9 days |
-| Average bill per stay | ~$2,470 |
-
-How it stays consistent without loops: each bed's history is laid out as back-to-back stays, so stays on a bed can't overlap. Stays are dealt to patients round-robin, so a patient's stays are years apart. The care-event nurse is computed with the same rotation formula as the shift schedule. All randomness comes from a hash of the row number (`stg.fn_Rand`), so every build produces the same data. Prices drift about 4% a year, so the price-snapshot columns hold real history.
-
-## Workflow example
-```sql
-DECLARE @stay INT, @bed INT;
-EXEC dbo.usp_AdmitPatient     @PatientID = 42, @AdmitPhysicianID = 7, @WardID = 1,
-                              @AdmissionID = @stay OUTPUT, @AssignedBedID = @bed OUTPUT;
-EXEC dbo.usp_RecordItemCharge @AdmissionID = @stay, @ItemID = 3, @Quantity = 2;
-EXEC dbo.usp_DischargePatient @AdmissionID = @stay, @DischargePhysicianID = 7;
-EXEC dbo.usp_GetPatientBill   @AdmissionID = @stay;     -- itemized bill (report R6)
-
-SELECT * FROM rpt.vw_BedOccupancyByWard ORDER BY WardNumber;          -- R1 today
-SELECT * FROM rpt.fn_BedOccupancyOn('2025-01-15') ORDER BY WardNumber; -- R1 on any past date
-```
-See [06 Reports and procedures](docs/06_reports_and_procedures.md) for every report, procedure and error code.
+</details>
 
 ## Tech stack
-SQL Server 2022 · T-SQL · PowerShell · Python (Streamlit, Plotly, pandas, mssql-python) · Mermaid (diagrams)
 
-## Repository layout
-```
-docs/          design documentation (original v1 diagrams in docs/original/)
-sql/           numbered, re-runnable build scripts
-tests/         automated tests (constraints, data quality, ETL, procedures, reports)
-queries/       analytical business queries
-run_sql.ps1    build / test runner
-data/          source CSVs for the ETL (course extract + crafted test batch)
-performance/   benchmark harness, results, before/after execution plans, sniffing demo
-dashboard/     Streamlit dashboard over the rpt views
-```
-
-## Roadmap
-- [x] **Phase 1:** Requirements, business rules, ERD, data dictionary, design review
-- [x] **Phase 2:** Schema DDL (tables, keys, checks, defaults, computed columns) + 41 automated constraint tests
-- [x] **Phase 3:** ETL from CSV via staging with validation and audit; 1.39M rows of synthetic data; data-quality and ETL tests
-- [x] **Phase 4:** Reporting views for R1–R12, transactional workflow procedures, 12 analytical queries, 41 workflow and report tests
-- [x] **Phase 5:** Benchmarked index tuning (15-query workload, before/after plans), parameter sniffing / RECOMPILE / Query Store demo
-- [x] **Phase 6:** Streamlit dashboard covering R1–R12 (reads only the `rpt` schema), smoke-tested, light and dark themes
-- [ ] **Phase 7:** One-command setup (Docker) and final write-up
+SQL Server 2022 · T-SQL · PowerShell · Python (Streamlit, Plotly, pandas, mssql-python) · Docker · Mermaid
 
 ## Credits
-The original v1 design and build was done by Database Team 5: Arnav Dhairyasheel Mohite, Onisha Gangwal and Simran Anjana Rajput. The v2 audit, redesign and extensions are by Onisha Gangwal.
+
+The original v1 design and database were built by ISM 6218 Database Team 5: Arnav Dhairyasheel Mohite, Onisha Gangwal and Simran Anjana Rajput. The v2 audit, redesign, ETL, synthetic data, procedures, reporting layer, performance work, tests and dashboard are by Onisha Gangwal.

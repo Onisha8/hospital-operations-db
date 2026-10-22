@@ -4,8 +4,8 @@
 
    Schemas
      dbo  - operational tables
-     stg  - ETL staging (Phase 3)
-     rpt  - reporting views (Phase 4)
+     stg  - ETL staging (05_etl_patient_import.sql)
+     rpt  - reporting views (07_reporting_views.sql)
 
    Re-runnable: creates objects only if they don't already exist.
    ============================================================================= */
@@ -21,7 +21,7 @@ GO
 
 -- Snapshot isolation lets readers (reports) avoid blocking writers (admissions).
 ALTER DATABASE HospitalOps SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
-ALTER DATABASE HospitalOps SET QUERY_STORE = ON;          -- used in Phase 5
+ALTER DATABASE HospitalOps SET QUERY_STORE = ON;          -- used by the performance/ benchmark and sniffing demo
 ALTER DATABASE HospitalOps SET RECOVERY SIMPLE;           -- dev database: keep the log small during bulk loads
 GO
 

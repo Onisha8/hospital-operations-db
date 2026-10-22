@@ -1,0 +1,44 @@
+# One-command build on any OS (Windows, macOS, Linux) with Docker:
+#
+#     docker compose up
+#
+# 1. "db" starts SQL Server 2022 Developer (Linux) on host port 14333.
+# 2. "build" waits until db is healthy, then runs sql/01..09 and all tests/
+#    with sqlcmd and exits. Its exit code is 0 only if every test passed.
+# The database keeps running for the dashboard (see dashboard/README.md).
+#
+# The SA password is a local development value; override it with
+# MSSQL_SA_PASSWORD in your environment or a .env file.
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: hospitalops-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-HospitalOps!Dev2026}"
+    ports:
+      - "14333:1433"
+    volumes:
+      - ./data:/data:ro                       # BULK INSERT reads the CSVs from here
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  build:
+    image: mcr.microsoft.com/mssql/server:2022-latest    # reuses the image for its sqlcmd
+    container_name: hospitalops-build
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-HospitalOps!Dev2026}"
+      RUN_TESTS: "${RUN_TESTS:-1}"
+    volumes:
+      - ./:/repo:ro
+    entrypoint: ["/bin/bash", "/repo/docker/build.sh"]
+    restart: "no"

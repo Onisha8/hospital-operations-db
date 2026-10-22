@@ -27,7 +27,7 @@ The goal of v2 is not to throw v1 away. It keeps everything v1 got right and fix
 | D8 | 🟡 Low | `Age = DATEDIFF(year, DOB, GETDATE())` | Off by one for everyone whose birthday hasn't happened yet this year (`DATEDIFF` counts year *boundaries*). | Birthday-aware formula |
 | D9 | 🟡 Low | No check that discharge ≥ admit, or that discharge date and discharging doctor come together. | Impossible stays can be saved. | `CK_Admission_DischargeAfterAdmit`, `CK_Admission_DischargePair` |
 | D10 | 🟡 Low | Nothing stops a patient having two open admissions. | Double-counted census. | Filtered unique index `PatientID WHERE DischargeDate IS NULL` |
-| D11 | 🟡 Low | `IX_AdmitDischarge` duplicates the clustered PK on `AdmitID`. | Wasted writes and storage with no read benefit. | Removed; indexing strategy is redone in Phase 5 from measured queries |
+| D11 | 🟡 Low | `IX_AdmitDischarge` duplicates the clustered PK on `AdmitID`. | Wasted writes and storage with no read benefit. | Removed; indexes are chosen from measured queries in [`sql/09_performance_indexes.sql`](../sql/09_performance_indexes.sql) |
 | D12 | 🟡 Low | Event types are a hard-coded `CK` (`'O','TA','AS','FS','MED','WC'`) with no descriptions. | Adding a type requires DDL; reports show cryptic codes. | `CareEventType` lookup table + FK |
 | D13 | 🟡 Low | `Ward` has no ward number or name (`Location` stores "ICU"); `Nurse`, `Physician` and `Patient` lack alternate phone and email that the narrative asks for. | Requirements gap. | Columns added |
 | D14 | 🟡 Low | `MONEY` data type; `Treatment.Descrip NVARCHAR(40)`. | `MONEY` rounds intermediate results in division; 40 characters is too short. | `DECIMAL(10,2)`, `NVARCHAR(255)` |
@@ -43,11 +43,11 @@ The v1 design document and the v1 database didn't fully agree. Examples: the doc
 | Rule | Why not declarative | How v2 handles it |
 |---|---|---|
 | Every ward has ≥ 1 nurse; every nurse ≥ 1 ward (BR-07) | Minimum cardinality across tables needs deferred constraints, which SQL Server doesn't have | Checks DQ01–DQ02 in [`tests/test_data_quality.sql`](../tests/test_data_quality.sql) |
-| Every stay has ≥ 1 item charge (BR-34) | Same | Checked inside `usp_DischargePatient` (Phase 4); check DQ03 |
-| Only available beds can be assigned; bed flag stays in sync (BR-26) | Cross-table state change | `usp_AdmitPatient` / `usp_DischargePatient` in a single transaction (Phase 4); filtered unique index as the safety net; check DQ06 |
+| Every stay has ≥ 1 item charge (BR-34) | Same | Checked inside `usp_DischargePatient`; check DQ03 |
+| Only available beds can be assigned; bed flag stays in sync (BR-26) | Cross-table state change | `usp_AdmitPatient` / `usp_DischargePatient` in a single transaction; filtered unique index as the safety net; check DQ06 |
 
 ## 5.5 Trade-offs I considered
 
 - **Keeping `Bed.Availability` even though occupancy can be derived from `BedAssignment`.** The narrative requires the flag and the admitting workflow reads it. A beds-in-maintenance status also can't be derived. The procedures keep it in sync, and data-quality check DQ06 detects drift.
 - **Surrogate vs. natural keys.** I used surrogates for entities and event tables (stable, narrow clustered keys) and natural codes for small lookups (`CertCode`, `EventTypeCode`) so queries stay readable.
-- **Non-persisted `Age`.** It depends on `GETDATE()`, so SQL Server won't allow it to be persisted or indexed. Queries that filter by age should filter on `DOB` ranges instead, which stays sargable. Phase 5 demonstrates this.
+- **Non-persisted `Age`.** It depends on `GETDATE()`, so SQL Server won't allow it to be persisted or indexed. Queries that filter by age should filter on `DOB` ranges instead, which stays sargable (an index on `DOB` can be used).

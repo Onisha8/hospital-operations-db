@@ -17,7 +17,7 @@
    Idempotent: a patient that already exists (same first name, last name and DOB)
    is SKIPPED, not duplicated, so the same file can be loaded twice safely.
 
-   Uses the sqlcmd-style variable $(DataDir). run_sql.ps1 sets it to the repo's
+   Uses the sqlcmd-style variable $(DataDir) (paths use "/", which works on Windows and Linux). run_sql.ps1 sets it to the repo's
    data folder. With sqlcmd, use -v DataDir="C:\path\to\data".
    ============================================================================= */
 
@@ -271,10 +271,13 @@ BEGIN
         -- with embedded quotes escaped.
         -- ROWTERMINATOR 0x0a (LF) accepts both Windows (CRLF) and Unix (LF) files; with CRLF
         -- the stray CR lands in the last column (BedNo), which is not loaded.
+        -- CODEPAGE = 65001 (UTF-8) is only valid on Windows; SQL Server on Linux (the Docker
+        -- build) rejects it, so it's added only there. The files are ASCII either way.
         SET @firstRow = ISNULL((SELECT MAX(StagingRowID) FROM stg.PatientImport), 0) + 1;
         SET @sql = N'BULK INSERT stg.vw_PatientImportLoad FROM N''' + REPLACE(@FilePath, N'''', N'''''') + N'''
-                     WITH (FORMAT = ''CSV'', FIRSTROW = 2, FIELDQUOTE = ''"'', ROWTERMINATOR = ''0x0a'',
-                           CODEPAGE = ''65001'', TABLOCK);';
+                     WITH (FORMAT = ''CSV'', FIRSTROW = 2, FIELDQUOTE = ''"'', ROWTERMINATOR = ''0x0a'', TABLOCK'
+                 + CASE WHEN @@VERSION LIKE N'%Linux%' THEN N'' ELSE N', CODEPAGE = ''65001''' END
+                 + N');';
         EXEC sys.sp_executesql @sql;
 
         -- Tag the new rows with the batch and their line number in the file (header is line 1).
@@ -308,8 +311,8 @@ GO
      batch 1: the course's patient extract (100 rows, clean)
      batch 2: a crafted extract with deliberate defects, to exercise every rule
    ============================================================================= */
-EXEC stg.usp_LoadPatientFile @FilePath = N'$(DataDir)\patient_import.csv';
-EXEC stg.usp_LoadPatientFile @FilePath = N'$(DataDir)\patient_import_batch2.csv';
+EXEC stg.usp_LoadPatientFile @FilePath = N'$(DataDir)/patient_import.csv';
+EXEC stg.usp_LoadPatientFile @FilePath = N'$(DataDir)/patient_import_batch2.csv';
 GO
 
 SELECT e.LoadBatchID AS Batch, e.SourceLine AS Line, e.Severity, e.ErrorCode AS Code, e.ErrorMessage, e.RawValue

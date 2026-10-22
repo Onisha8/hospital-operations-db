@@ -7,7 +7,7 @@
    Run immediately after 02_create_tables.sql, which recreates the tables.
 
    Only indexes that enforce a rule are created here. Performance indexes
-   (including indexes on FK columns) are added in Phase 5 based on measured
+   (including indexes on FK columns) are added in 09_performance_indexes.sql based on measured
    execution plans.
    ============================================================================= */
 

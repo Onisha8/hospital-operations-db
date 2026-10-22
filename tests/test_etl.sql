@@ -29,12 +29,12 @@ DECLARE @ok BIT, @d NVARCHAR(400);
 
 SELECT @ok = CASE WHEN Status = 'SUCCEEDED' AND RowsRead = 100 AND RowsLoaded = 100 AND RowsRejected = 0 AND RowsSkipped = 0 THEN 1 ELSE 0 END,
        @d  = CONCAT(N'read ', RowsRead, N', loaded ', RowsLoaded, N', rejected ', RowsRejected, N', skipped ', RowsSkipped)
-FROM stg.LoadBatch WHERE SourceFile LIKE N'%\patient_import.csv';
+FROM stg.LoadBatch WHERE SourceFile LIKE N'%[/\]patient_import.csv';
 EXEC #check N'Course CSV: 100 read, 100 loaded, 0 rejected', @ok, @d;
 
 SELECT @ok = CASE WHEN Status = 'SUCCEEDED' AND RowsRead = 15 AND RowsLoaded = 3 AND RowsRejected = 11 AND RowsSkipped = 1 THEN 1 ELSE 0 END,
        @d  = CONCAT(N'read ', RowsRead, N', loaded ', RowsLoaded, N', rejected ', RowsRejected, N', skipped ', RowsSkipped)
-FROM stg.LoadBatch WHERE SourceFile LIKE N'%\patient_import_batch2.csv';
+FROM stg.LoadBatch WHERE SourceFile LIKE N'%[/\]patient_import_batch2.csv';
 EXEC #check N'Crafted batch: 15 read, 3 loaded, 11 rejected, 1 skipped', @ok, @d;
 
 /* ---------- Exactly the expected errors, on the expected lines ------------- */
@@ -43,7 +43,7 @@ INSERT @expected VALUES
     (4,'E01'), (5,'E02'), (6,'E03'), (7,'E04'), (8,'E05'), (9,'E06'), (10,'E07'), (11,'E09'),
     (12,'S01'), (13,'E10'), (14,'E08'), (15,'E01'), (15,'E05'), (15,'E07');
 
-DECLARE @batch2 INT = (SELECT LoadBatchID FROM stg.LoadBatch WHERE SourceFile LIKE N'%\patient_import_batch2.csv');
+DECLARE @batch2 INT = (SELECT LoadBatchID FROM stg.LoadBatch WHERE SourceFile LIKE N'%[/\]patient_import_batch2.csv');
 DECLARE @missing INT, @unexpected INT;
 SELECT @missing = COUNT(*) FROM (SELECT SourceLine, ErrorCode FROM @expected
                                  EXCEPT SELECT SourceLine, ErrorCode FROM stg.PatientImportError WHERE LoadBatchID = @batch2) x;
@@ -89,7 +89,7 @@ GO
 DECLARE @before INT = (SELECT COUNT(*) FROM dbo.Patient), @after INT, @ok BIT, @d NVARCHAR(400);
 
 BEGIN TRANSACTION;
-    EXEC stg.usp_LoadPatientFile @FilePath = N'$(DataDir)\patient_import.csv';
+    EXEC stg.usp_LoadPatientFile @FilePath = N'$(DataDir)/patient_import.csv';
     SET @after = (SELECT COUNT(*) FROM dbo.Patient);
     SELECT @ok = CASE WHEN RowsRead = 100 AND RowsLoaded = 0 AND RowsSkipped = 100 AND @after = @before THEN 1 ELSE 0 END,
            @d  = CONCAT(N'loaded ', RowsLoaded, N', skipped ', RowsSkipped, N', patients ', @before, N' -> ', @after)
