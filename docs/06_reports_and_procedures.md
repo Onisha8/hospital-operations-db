@@ -5,7 +5,7 @@
 | Reporting (`rpt`) | [`sql/07_reporting_views.sql`](../sql/07_reporting_views.sql) | One view or inline function per required report R1–R12 |
 | Workflow (`dbo`) | [`sql/08_stored_procedures.sql`](../sql/08_stored_procedures.sql) | Admit, transfer, charge, treat, discharge, bill |
 | Analytics | [`queries/business_queries.sql`](../queries/business_queries.sql) | 12 ad-hoc business questions |
-| Tests | [`tests/test_procedures_and_reports.sql`](../tests/test_procedures_and_reports.sql) | 25 workflow tests + 16 report reconciliations |
+| Tests | [`tests/test_procedures_and_reports.sql`](../tests/test_procedures_and_reports.sql) | 26 workflow tests + 16 report reconciliations |
 
 ---
 

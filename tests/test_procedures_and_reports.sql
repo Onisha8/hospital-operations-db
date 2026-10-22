@@ -151,6 +151,24 @@ SELECT @ok = CASE WHEN ta.PhysicianID IS NULL AND ta.ChargedAmount = t.StandardC
 FROM dbo.TreatmentAdministration ta JOIN dbo.Treatment t ON t.TreatmentID = ta.TreatmentID WHERE ta.TreatmentAdminID = @ta;
 EXEC #check 'A', N'Treatment without physician recorded at list price', @ok, @d;
 
+-- Regression: the default time is SYSDATETIME() rounded to whole seconds, which can
+-- round UP. 25 calls 50 ms apart span more than a second, so at least one lands in
+-- the round-up half; none may be rejected as "in the future".
+DECLARE @k INT = 0, @rejected INT = 0;
+WHILE @k < 25
+BEGIN
+    BEGIN TRY
+        EXEC dbo.usp_RecordTreatment @AdmissionID = @A1, @TreatmentID = @T1;
+    END TRY
+    BEGIN CATCH
+        SET @rejected += 1;
+    END CATCH;
+    WAITFOR DELAY '00:00:00.050';
+    SET @k += 1;
+END;
+SET @ok = IIF(@rejected = 0, 1, 0); SET @d = CONCAT(@rejected, N' of 25 default-time calls rejected');
+EXEC #check 'A', N'Treatment default time never rejected as future (rounding regression)', @ok, @d;
+
 SET @sql = CONCAT(N'EXEC dbo.usp_RecordTreatment @AdmissionID = ', @A1, N', @TreatmentID = ', @T1, N', @AdministeredAt = ''2099-01-01''');
 EXEC #expect_error N'Treatment: time in the future -> 50017', @sql, 50017;
 
@@ -187,9 +205,11 @@ EXEC #check 'A', N'Discharge: stay closed, bed assignment closed, bed released',
 SET @sql = CONCAT(N'EXEC dbo.usp_DischargePatient @AdmissionID = ', @A1, N', @DischargePhysicianID = 1');
 EXEC #expect_error N'Discharge: already discharged -> 50011', @sql, 50011;
 
-SELECT @ok = CASE WHEN sc.ItemTotal = 2 * i.UnitCharge AND sc.TreatmentTotal = t.StandardCharge
+-- 1 explicit treatment + 25 from the rounding regression loop = 26
+SELECT @ok = CASE WHEN sc.ItemTotal = 2 * i.UnitCharge
+                   AND sc.TreatmentCount = 26 AND sc.TreatmentTotal = 26 * t.StandardCharge
                    AND sc.GrandTotal = sc.ItemTotal + sc.TreatmentTotal THEN 1 ELSE 0 END,
-       @d  = CONCAT(N'items ', sc.ItemTotal, N' + treatments ', sc.TreatmentTotal, N' = ', sc.GrandTotal)
+       @d  = CONCAT(N'items ', sc.ItemTotal, N' + ', sc.TreatmentCount, N' treatments ', sc.TreatmentTotal, N' = ', sc.GrandTotal)
 FROM rpt.vw_StayCharges sc
 CROSS JOIN dbo.Item i CROSS JOIN dbo.Treatment t
 WHERE sc.AdmissionID = @A1 AND i.ItemID = @I1 AND t.TreatmentID = @T1;

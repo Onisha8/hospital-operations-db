@@ -99,3 +99,4 @@ finally {
     $conn.Close()
 }
 if ($failed) { exit 1 }
+exit 0   # explicit, so callers never see a stale $LASTEXITCODE

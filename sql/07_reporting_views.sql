@@ -301,6 +301,9 @@ SELECT
     t.TreatmentName,
     ta.AdministeredAt                      AS DateOfService,
     ta.Results,
+    -- Raw column exposed so callers can filter "PhysicianID IS NULL", which can seek an index.
+    -- Filtering on the CASE flag below can't (an expression over a column isn't sargable).
+    ta.PhysicianID,
     CASE WHEN ph.PhysicianID IS NULL THEN 'N' ELSE 'Y' END AS HasTreatingPhysician,
     CASE WHEN ph.PhysicianID IS NULL THEN N'(not recorded)'
          ELSE CONCAT(N'Dr. ', ph.FirstName, N' ', ph.LastName) END AS TreatingPhysician,

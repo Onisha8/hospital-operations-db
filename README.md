@@ -10,9 +10,9 @@ A SQL Server database for hospital ward operations covering nurses, wards, beds,
 - **1.39M rows of consistent synthetic data**, generated set-based and reproducibly in ~80 s. Five years of hospital history in which beds are never double-booked and every care event is performed by a nurse who was on shift in that ward that day.
 - **All 12 required reports** as `rpt` views and inline functions, each reconciled against the base tables by automated tests.
 - **Transactional workflow procedures** (admit, transfer, charge, treat, discharge) using the savepoint pattern, so they compose inside larger transactions. Lock hints (`UPDLOCK, HOLDLOCK` / `READPAST`) close the check-then-act race on beds. Errors use a documented 500xx catalog.
-- **106 automated tests:** 41 constraint, 15 data-quality, 9 ETL, 25 workflow and 16 report reconciliations.
+- **107 automated tests:** 41 constraint, 15 data-quality, 9 ETL, 26 workflow and 16 report reconciliations. They caught real bugs during development: events generated in the future, and a timestamp-rounding bug in a procedure.
 - **Design review:** I audited the original course build from the system catalog and found 16 defects, including a no-op foreign key and a primary key that blocked nurse rotations. All are fixed in v2. See [design review](docs/05_design_review.md).
-- **Performance tuning** *(Phase 5)*: execution-plan analysis, covering and filtered indexes, join hints and Query Store, measured on 1M+ rows.
+- **Measured performance tuning:** 10 indexes, each justified by a benchmarked query, cut logical reads **7× to 2,498×** (worst report 2.6 s → 6 ms). The diagnosis came from execution plans (eager index spools). The write cost is measured too (3.6× on bulk inserts). A parameter sniffing demo covers `RECOMPILE`, index hints and Query Store. See [PERFORMANCE.md](performance/PERFORMANCE.md).
 
 ## Data model
 
@@ -46,6 +46,7 @@ The full logical model with attributes is in [docs/03_erd_and_schema.md](docs/03
 | [04 Data dictionary](docs/04_data_dictionary.md) | Every table, column, type and constraint |
 | [05 Design review](docs/05_design_review.md) | v1 audit findings → v2 fixes and trade-offs |
 | [06 Reports and procedures](docs/06_reports_and_procedures.md) | Report catalog, workflow procedures, transaction design, error catalog, analytical queries, sample output |
+| [Performance tuning](performance/PERFORMANCE.md) | Method, before/after results, plan diagnosis, trade-offs, parameter sniffing and Query Store |
 
 ## Quick start
 Requires SQL Server 2019+ (Developer or Express) on Windows with Windows authentication.
@@ -67,13 +68,19 @@ Requires SQL Server 2019+ (Developer or Express) on Windows with Windows authent
 | `sql/06_generate_bulk_data.sql` | ~1.39M rows of reproducible synthetic data across all tables (5 years of history) |
 | `sql/07_reporting_views.sql` | Reporting layer: views and inline TVFs for reports R1–R12 |
 | `sql/08_stored_procedures.sql` | `usp_AdmitPatient`, `usp_TransferPatient`, `usp_RecordItemCharge`, `usp_RecordTreatment`, `usp_DischargePatient`, `usp_GetPatientBill` |
+| `sql/09_performance_indexes.sql` | 10 tuning indexes, each tagged with the workload query it serves, plus the ones deliberately not added |
 | `tests/test_constraints.sql` | **41 tests**: valid data is accepted and every invalid case is rejected *by the expected named constraint*. Runs in a rolled-back transaction. |
 | `tests/test_data_quality.sql` | **15 checks** constraints can't express: minimum cardinalities, no overlapping stays, events inside their stay, nurse on shift, no supervision cycles (recursive CTE) |
 | `tests/test_etl.sql` | **9 tests**: batch counts, every crafted defect caught by the right rule, normalization, idempotent reload |
-| `tests/test_procedures_and_reports.sql` | **41 tests**: a full admit → charge → treat → transfer → discharge walk-through, every documented error, savepoint behavior, and reconciliation of all 12 reports |
+| `tests/test_procedures_and_reports.sql` | **42 tests**: a full admit → charge → treat → transfer → discharge walk-through, every documented error, savepoint behavior, and reconciliation of all 12 reports |
 | `queries/business_queries.sql` | 12 analytical questions (window functions, `PIVOT`, `EXCEPT`/`INTERSECT`, gaps and islands). Not part of the build: run with `-Files queries\business_queries.sql` |
 
-A full build from scratch, including the data load and all 106 tests, takes about 90 seconds.
+A full build from scratch, including the data load and all 107 tests, takes about 90 seconds.
+
+```powershell
+.\performance\run_benchmark.ps1                          # before/after index benchmark -> performance/results.md + .sqlplan files
+.\run_sql.ps1 -Files performance\parameter_sniffing_demo.sql
+```
 
 ## ETL: patient import
 ```
@@ -133,7 +140,7 @@ tests/         automated tests (constraints, data quality, ETL, procedures, repo
 queries/       analytical business queries
 run_sql.ps1    build / test runner
 data/          source CSVs for the ETL (course extract + crafted test batch)
-performance/   execution plans and benchmark results
+performance/   benchmark harness, results, before/after execution plans, sniffing demo
 dashboard/     reporting dashboard
 ```
 
@@ -142,7 +149,7 @@ dashboard/     reporting dashboard
 - [x] **Phase 2:** Schema DDL (tables, keys, checks, defaults, computed columns) + 41 automated constraint tests
 - [x] **Phase 3:** ETL from CSV via staging with validation and audit; 1.39M rows of synthetic data; data-quality and ETL tests
 - [x] **Phase 4:** Reporting views for R1–R12, transactional workflow procedures, 12 analytical queries, 41 workflow and report tests
-- [ ] **Phase 5:** Performance tuning with before/after execution plans
+- [x] **Phase 5:** Benchmarked index tuning (15-query workload, before/after plans), parameter sniffing / RECOMPILE / Query Store demo
 - [ ] **Phase 6:** Reporting dashboard
 - [ ] **Phase 7:** One-command setup (Docker) and final write-up
 

@@ -261,9 +261,13 @@ BEGIN
     BEGIN
         SET @msg = CONCAT(N'Physician ', @PhysicianID, N' not found.'); THROW 50002, @msg, 1;
     END;
+    -- Compare against the clock at the SAME precision as the column. CAST to
+    -- DATETIME2(0) rounds to the nearest second, so a default taken at hh:mm:ss.6
+    -- becomes hh:mm:ss+1 and would look "in the future" next to the raw
+    -- SYSDATETIME(). That was an intermittent bug caught by the test suite.
     IF CAST(@AdministeredAt AS DATE) < @admit
        OR (@discharge IS NOT NULL AND CAST(@AdministeredAt AS DATE) > @discharge)
-       OR @AdministeredAt > SYSDATETIME()
+       OR @AdministeredAt > CAST(SYSDATETIME() AS DATETIME2(0))
         THROW 50017, N'Treatment time is outside the stay.', 1;
 
     INSERT dbo.TreatmentAdministration (AdmissionID, TreatmentID, PhysicianID, AdministeredAt, Results, ChargedAmount)
