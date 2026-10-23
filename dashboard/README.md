@@ -35,6 +35,12 @@ export HOSPITALOPS_SERVER="localhost,14333" HOSPITALOPS_USER=sa HOSPITALOPS_PASS
 
 On macOS/Linux, create the venv with `python3 -m venv .venv` and use `.venv/bin/...` instead of `.venv\Scripts\...`.
 
+**"No connection could be made because the target machine actively refused it"** means the database container isn't running. For example, `docker compose up --exit-code-from build` stops it once the build finishes. The data is kept inside the container, so start the database again (no rebuild) with:
+
+```bash
+docker compose up -d --wait db
+```
+
 ## Design notes
 
 - **Driver:** [`mssql-python`](https://pypi.org/project/mssql-python/), Microsoft's Python driver. It bundles its own ODBC layer, so nothing has to be installed system-wide. The legacy driver built into Windows can't complete the TLS handshake with SQL Server 2022.
